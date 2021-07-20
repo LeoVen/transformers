@@ -1,18 +1,31 @@
 use std::fs;
+use std::fs::File;
 use std::io;
 use std::io::Read;
+use std::io::Write;
 use std::path::PathBuf;
-use std::thread;
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::thread;
 
-const OUT_DATA: &'static str = "../data/";
+const OUT_DATA: &str = "../data/";
 
-fn clone_repos(tag: usize, repos: Vec<String>) -> io::Result<(u32, u32)> {
+fn clone_repos(
+    tag: usize,
+    repos: Vec<(usize, String)>,
+    log: Arc<Mutex<File>>,
+) -> io::Result<(u32, u32)> {
     let mut error = 0u32;
     let mut success = 0u32;
-    for (i, repo) in repos.into_iter().enumerate() {
+    for (i, (id, repo)) in repos.into_iter().enumerate() {
         if i > 1 {
             break;
+        }
+
+        let mut log = log.lock().expect("Failed to lock Mutex for Log file");
+        if log.write(format!("{}\n", id).as_bytes()).is_err() {
+            eprintln!("Failed to write log of {}", id);
         }
 
         let repo_folder = format!("{}{}{:0>6}", OUT_DATA, tag, i);
@@ -65,22 +78,32 @@ fn clean_data(path: String) -> io::Result<()> {
 fn main() {
     if let Ok(mut file) = fs::File::open("../repos.txt") {
         let mut data = String::with_capacity(10000000);
-        if let Ok(_) = file.read_to_string(&mut data) {
-            let rows = data.split('\n').map(|row| {
-                let mut result = row.to_string();
-                let _ = result.pop(); // Remove \n
-                result
-            }).collect::<Vec<_>>();
-            let chunks: Vec<Vec<String>> = rows.chunks(rows.len() / 8)
-                                               .map(|chunk| chunk.to_vec())
-                                               .collect();
+        if file.read_to_string(&mut data).is_ok() {
+            let rows: Vec<(usize, String)> = data
+                .split('\n')
+                .map(|row| {
+                    debug_assert!(!row.is_empty());
+                    let row = &row[..row.len() - 1]; // Remove \n
+                    let mut iter = row.split(',');
+                    (
+                        str::parse::<usize>(iter.next().expect("Missing Row Id"))
+                            .expect("Failed to parse Row Id"),
+                        iter.next().expect("Missing Row URL").to_string(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let chunks: Vec<Vec<(usize, String)>> = rows
+                .chunks(rows.len() / 8)
+                .map(|chunk| chunk.to_vec())
+                .collect();
             let chunks = chunks;
             let mut handles = vec![];
+            let log = File::create("../log.txt").expect("Failed to create Log file");
+            let log = Arc::new(Mutex::new(log));
 
             for (tag, chunk) in chunks.into_iter().enumerate() {
-                handles.push(thread::spawn(move || {
-                    clone_repos(tag, chunk)
-                }))
+                let log = log.clone();
+                handles.push(thread::spawn(move || clone_repos(tag, chunk, log)))
             }
 
             let mut error = 0;
@@ -92,7 +115,7 @@ fn main() {
                             success += result.0;
                             error += result.1;
                         }
-                        Err(e) => eprintln!("{}", e)
+                        Err(e) => eprintln!("{}", e),
                     }
                 } else {
                     eprintln!("Thread exited with error");
