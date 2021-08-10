@@ -8,7 +8,7 @@ g = Github(TOKEN, per_page=1000, retry=1)
 
 def query(start, end):
     format = '%Y-%m-%d'
-    return f'language:java created:{datetime.utcfromtimestamp(start).strftime(format)}..{datetime.utcfromtimestamp(end).strftime(format)}'
+    return f'language:python created:{datetime.utcfromtimestamp(start).strftime(format)}..{datetime.utcfromtimestamp(end).strftime(format)}'
 
 output = open('repos.txt', 'w')
 log = open('log.txt', 'w')
