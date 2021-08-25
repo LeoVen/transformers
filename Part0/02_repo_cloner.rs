@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 
-const OUT_DATA: &str = "../data/";
-const NUM_THREADS: usize = 2;
+const OUT_DATA: &str = "./data/";
+const NUM_THREADS: usize = 4;
 
 fn clone_repos(
     tag: usize,
@@ -100,7 +100,7 @@ fn clean_data(tag: usize, path: String) -> io::Result<()> {
 }
 
 fn main() {
-    if let Ok(mut file) = fs::File::open("../repos.txt") {
+    if let Ok(mut file) = fs::File::open("repos.txt") {
         let mut data = String::with_capacity(10000000);
         if file.read_to_string(&mut data).is_ok() {
             // Read log
@@ -108,7 +108,7 @@ fn main() {
                 .read(true)
                 .append(true)
                 .write(false)
-                .open("../log.txt")
+                .open("log.txt")
                 .expect("Failed to open Log file");
             let mut keys = String::new();
             log_file
